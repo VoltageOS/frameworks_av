@@ -490,7 +490,7 @@ binder::Status createSurfaceFromGbp(
         return STATUS_ERROR(CameraService::ERROR_ILLEGAL_ARGUMENT, msg.string());
     }
     if (timestampBase < OutputConfiguration::TIMESTAMP_BASE_DEFAULT ||
-            timestampBase > OutputConfiguration::TIMESTAMP_BASE_MAX) {
+            timestampBase > OutputConfiguration::TIMESTAMP_BASE_CHOREOGRAPHER_SYNCED) {
         String8 msg = String8::format("Camera %s: invalid timestamp base %d",
                 logicalCameraId.string(), timestampBase);
         ALOGE("%s: %s", __FUNCTION__, msg.string());
@@ -651,10 +651,6 @@ convertToHALStreamCombination(
         stream.bufferSize = 0;
         stream.groupId = -1;
         stream.sensorPixelModesUsed = defaultSensorPixelModes;
-        using DynamicRangeProfile =
-            aidl::android::hardware::camera::metadata::RequestAvailableDynamicRangeProfilesMap;
-        stream.dynamicRangeProfile =
-            DynamicRangeProfile::ANDROID_REQUEST_AVAILABLE_DYNAMIC_RANGE_PROFILES_MAP_STANDARD;
         streamConfiguration.streams[streamIdx++] = stream;
         streamConfiguration.multiResolutionInputImage =
                 sessionConfiguration.inputIsMultiResolution();
