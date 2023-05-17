@@ -3159,7 +3159,7 @@ status_t AudioPolicyManager::getVolumeIndexForAttributes(const audio_attributes_
     // stream by the engine.
     DeviceTypeSet deviceTypes = {device};
     if (device == AUDIO_DEVICE_OUT_DEFAULT_FOR_VOLUME) {
-        DeviceTypeSet deviceTypes = mEngine->getOutputDevicesForAttributes(
+        deviceTypes = mEngine->getOutputDevicesForAttributes(
                 attr, nullptr, true /*fromCache*/).types();
     }
     return getVolumeIndex(getVolumeCurves(attr), index, deviceTypes);
@@ -3169,7 +3169,7 @@ status_t AudioPolicyManager::getVolumeIndex(const IVolumeCurves &curves,
                                             int &index,
                                             const DeviceTypeSet& deviceTypes) const
 {
-    if (isSingleDeviceType(deviceTypes, audio_is_output_device)) {
+    if (!isSingleDeviceType(deviceTypes, audio_is_output_device)) {
         return BAD_VALUE;
     }
     index = curves.getVolumeIndex(deviceTypes);
@@ -3248,9 +3248,16 @@ audio_io_handle_t AudioPolicyManager::selectOutputForMusicEffects()
     }
 
     if (output != mMusicEffectOutput) {
-        mEffects.moveEffects(AUDIO_SESSION_OUTPUT_MIX, mMusicEffectOutput, output);
-        mpClientInterface->moveEffects(AUDIO_SESSION_OUTPUT_MIX, mMusicEffectOutput, output);
-        mMusicEffectOutput = output;
+        if (mpClientInterface->moveEffects(
+                                      AUDIO_SESSION_OUTPUT_MIX,
+                                      mMusicEffectOutput, output) != NO_ERROR
+            && mOutputs.valueFor(output)->isDuplicated()) {
+            ALOGW("gloabl effect do not support duplicating thread");
+            output = AUDIO_IO_HANDLE_NONE;
+        } else {
+            mEffects.moveEffects(AUDIO_SESSION_OUTPUT_MIX, mMusicEffectOutput, output);
+            mMusicEffectOutput = output;
+        }
     }
 
     ALOGV("selectOutputForMusicEffects selected output %d", output);
@@ -5630,7 +5637,9 @@ status_t AudioPolicyManager::initialize() {
         }
     }
 
-    mEngine->updateDeviceSelectionCache();
+    // The actual device selection cache will be updated when calling `updateDevicesAndOutputs`
+    // at the end of this function.
+    mEngine->initializeDeviceSelectionCache();
     mCommunnicationStrategy = mEngine->getProductStrategyForAttributes(
         mEngine->getAttributesForStreamType(AUDIO_STREAM_VOICE_CALL));
 

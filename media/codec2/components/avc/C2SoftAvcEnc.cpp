@@ -334,7 +334,10 @@ public:
         // By default needsUpdate = false in case the supplied level does meet
         // the requirements. For Level 1b, we want to update the level anyway,
         // so we set it to true in that case.
-        bool needsUpdate = (me.v.level == LEVEL_AVC_1B);
+        bool needsUpdate = false;
+        if (me.v.level == LEVEL_AVC_1B || !me.F(me.v.level).supportsAtAll(me.v.level)) {
+            needsUpdate = true;
+        }
         for (const LevelLimits &limit : kLimits) {
             if (mbs <= limit.mbs && mbsPerSec <= limit.mbsPerSec &&
                     bitrate.v.value <= limit.bitrate) {
@@ -1766,17 +1769,20 @@ void C2SoftAvcEnc::process(
     //         }
     //     }
     // }
-    std::shared_ptr<const C2GraphicView> view;
+    std::shared_ptr<C2GraphicView> view;
     std::shared_ptr<C2Buffer> inputBuffer;
     if (!work->input.buffers.empty()) {
         inputBuffer = work->input.buffers[0];
-        view = std::make_shared<const C2GraphicView>(
+        view = std::make_shared<C2GraphicView>(
                 inputBuffer->data().graphicBlocks().front().map().get());
         if (view->error() != C2_OK) {
             ALOGE("graphic view map err = %d", view->error());
             work->workletsProcessed = 1u;
             return;
         }
+        //(b/232396154)
+        //workaround for incorrect crop size in view when using surface mode
+        view->setCrop_be(C2Rect(mSize->width, mSize->height));
     }
 
     do {

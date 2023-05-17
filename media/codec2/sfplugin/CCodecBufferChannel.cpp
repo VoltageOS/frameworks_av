@@ -74,7 +74,7 @@ using DrmBufferType = hardware::drm::V1_0::BufferType;
 
 namespace {
 
-constexpr size_t kSmoothnessFactor = 4;
+constexpr size_t kSmoothnessFactor = 2;
 constexpr size_t kRenderingDepth = 3;
 
 // This is for keeping IGBP's buffer dropping logic in legacy mode other
@@ -725,13 +725,21 @@ void CCodecBufferChannel::feedInputBufferIfAvailableInternal() {
         }
     }
     size_t numActiveSlots = 0;
-    while (!mPipelineWatcher.lock()->pipelineFull()) {
+    size_t pipelineRoom = 0;
+    size_t numInputBuffersAvailable = 0;
+    while (!mPipelineWatcher.lock()->pipelineFull(&pipelineRoom)) {
         sp<MediaCodecBuffer> inBuffer;
         size_t index;
         {
             Mutexed<Input>::Locked input(mInput);
             numActiveSlots = input->buffers->numActiveSlots();
             if (numActiveSlots >= input->numSlots) {
+                break;
+            }
+            if (pipelineRoom <= input->buffers->numClientBuffers()) {
+                ALOGV("pipelineRoom(%zu) is <= numClientBuffers(%zu). "
+                    "Not signalling any more buffers to client",
+                    pipelineRoom, input->buffers->numClientBuffers());
                 break;
             }
             if (!input->buffers->requestNewBuffer(&index, &inBuffer)) {
@@ -741,6 +749,11 @@ void CCodecBufferChannel::feedInputBufferIfAvailableInternal() {
         }
         ALOGV("[%s] new input index = %zu [%p]", mName, index, inBuffer.get());
         mCallback->onInputBufferAvailable(index, inBuffer);
+        if (++numInputBuffersAvailable >= pipelineRoom) {
+            ALOGV("[%s] pipeline will overflow after %zu queueInputBuffer", mName,
+                    numInputBuffersAvailable);
+            break;
+        }
     }
     ALOGV("[%s] # active slots after feedInputBufferIfAvailable = %zu", mName, numActiveSlots);
 }
@@ -1871,6 +1884,7 @@ bool CCodecBufferChannel::handleWork(
             newInputDelay.value_or(input->inputDelay) +
             newPipelineDelay.value_or(input->pipelineDelay) +
             kSmoothnessFactor;
+        input->inputDelay = newInputDelay.value_or(input->inputDelay);
         if (input->buffers->isArrayMode()) {
             if (input->numSlots >= newNumSlots) {
                 input->numExtraSlots = 0;
@@ -1965,7 +1979,10 @@ bool CCodecBufferChannel::handleWork(
     // csd cannot be re-ordered and will always arrive first.
     if (initData != nullptr) {
         Mutexed<Output>::Locked output(mOutput);
-        if (output->buffers && outputFormat) {
+        if (!output->buffers) {
+            return false;
+        }
+        if (outputFormat) {
             output->buffers->updateSkipCutBuffer(outputFormat);
             output->buffers->setFormat(outputFormat);
         }
@@ -1974,7 +1991,7 @@ bool CCodecBufferChannel::handleWork(
         }
         size_t index;
         sp<MediaCodecBuffer> outBuffer;
-        if (output->buffers && output->buffers->registerCsd(initData, &index, &outBuffer) == OK) {
+        if (output->buffers->registerCsd(initData, &index, &outBuffer) == OK) {
             outBuffer->meta()->setInt64("timeUs", timestamp.peek());
             outBuffer->meta()->setInt32("flags", BUFFER_FLAG_CODEC_CONFIG);
             ALOGV("[%s] onWorkDone: csd index = %zu [%p]", mName, index, outBuffer.get());

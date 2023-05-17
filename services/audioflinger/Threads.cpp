@@ -3999,6 +3999,10 @@ bool AudioFlinger::PlaybackThread::threadLoop()
             activeTracks.insert(activeTracks.end(), mActiveTracks.begin(), mActiveTracks.end());
 
             setHalLatencyMode_l();
+
+            for (const auto &track : mActiveTracks ) {
+                track->updateTeePatches();
+            }
         } // mLock scope ends
 
         if (mBytesRemaining == 0) {
@@ -6275,7 +6279,8 @@ void AudioFlinger::DirectOutputThread::onAddNewTrack_l()
                 mFlushPending = true;
             }
         } else /* mType == OFFLOAD */ {
-            if (previousTrack->sessionId() != latestTrack->sessionId()) {
+            if (previousTrack->sessionId() != latestTrack->sessionId() ||
+                previousTrack->isFlushPending()) {
                 mFlushPending = true;
             }
         }

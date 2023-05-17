@@ -1075,10 +1075,8 @@ void CCodec::configure(const sp<AMessage> &msg) {
             } else {
                 if ((config->mDomain & Config::IS_ENCODER) || !surface) {
                     if (vendorSdkVersion < __ANDROID_API_S__ &&
-                            (format == COLOR_FormatYUV420Flexible ||
-                             format == COLOR_FormatYUV420Planar ||
+                            (format == COLOR_FormatYUV420Planar ||
                              format == COLOR_FormatYUV420PackedPlanar ||
-                             format == COLOR_FormatYUV420SemiPlanar ||
                              format == COLOR_FormatYUV420PackedSemiPlanar)) {
                         // pre-S framework used to map these color formats into YV12.
                         // Codecs from older vendor partition may be relying on
@@ -1786,12 +1784,6 @@ void CCodec::start() {
         return;
     }
 
-    c2_status_t err = comp->start();
-    if (err != C2_OK) {
-        mCallback->onError(toStatusT(err, C2_OPERATION_Component_start),
-                           ACTION_CODE_FATAL);
-        return;
-    }
     sp<AMessage> inputFormat;
     sp<AMessage> outputFormat;
     status_t err2 = OK;
@@ -1815,6 +1807,13 @@ void CCodec::start() {
     err2 = mChannel->start(inputFormat, outputFormat, buffersBoundToCodec);
     if (err2 != OK) {
         mCallback->onError(err2, ACTION_CODE_FATAL);
+        return;
+    }
+
+    c2_status_t err = comp->start();
+    if (err != C2_OK) {
+        mCallback->onError(toStatusT(err, C2_OPERATION_Component_start),
+                           ACTION_CODE_FATAL);
         return;
     }
 

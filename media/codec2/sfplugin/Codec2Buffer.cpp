@@ -22,6 +22,7 @@
 
 #include <aidl/android/hardware/graphics/common/Cta861_3.h>
 #include <aidl/android/hardware/graphics/common/Smpte2086.h>
+#include <android-base/no_destructor.h>
 #include <android-base/properties.h>
 #include <android/hardware/cas/native/1.0/types.h>
 #include <android/hardware/drm/1.0/types.h>
@@ -533,7 +534,7 @@ public:
                         * align(mHeight, 64) / plane.rowSampling;
             }
 
-            if (minPtr == mView.data()[0] && (maxPtr - minPtr + 1) <= planeSize) {
+            if (minPtr == mView.data()[0] && (maxPtr - minPtr) <= planeSize) {
                 // FIXME: this is risky as reading/writing data out of bound results
                 //        in an undefined behavior, but gralloc does assume a
                 //        contiguous mapping
@@ -545,8 +546,7 @@ public:
                     mediaImage->mPlane[i].mHorizSubsampling = plane.colSampling;
                     mediaImage->mPlane[i].mVertSubsampling = plane.rowSampling;
                 }
-                mWrapped = new ABuffer(const_cast<uint8_t *>(minPtr),
-                                       maxPtr - minPtr + 1);
+                mWrapped = new ABuffer(const_cast<uint8_t *>(minPtr), maxPtr - minPtr);
                 ALOGV("Converter: wrapped (capacity=%zu)", mWrapped->capacity());
             }
         }
@@ -1019,8 +1019,8 @@ using IMapper4 = ::android::hardware::graphics::mapper::V4_0::IMapper;
 namespace {
 
 sp<IMapper4> GetMapper4() {
-    static sp<IMapper4> sMapper = IMapper4::getService();
-    return sMapper;
+    static ::android::base::NoDestructor<sp<IMapper4>> sMapper(IMapper4::getService());
+    return *sMapper;
 }
 
 class Gralloc4Buffer {
